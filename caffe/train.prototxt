@@ -1,0 +1,396 @@
+name: "vanila"
+
+layer {
+   type: "HDF5Data"
+   top: "data" # same name as given in create_dataset!
+   top: "landmarks"
+   hdf5_data_param {
+     source: "./train_dataset.txt" # do not give the h5 files directly, but the list.
+     batch_size: 128
+   }
+   include { phase:TRAIN }
+ }
+
+layer {
+   type: "HDF5Data"
+   top: "data" # same name as given in create_dataset!
+   top: "landmarks"
+   hdf5_data_param {
+     source: "./test_dataset.txt" # do not give the h5 files directly, but the list.
+     batch_size: 32
+   }
+   include { phase:TEST }
+}
+
+layer {
+    name: "Conv1"
+    type: "Convolution"
+    bottom: "data"
+    top: "Conv1"
+    param {
+        lr_mult: 1
+        decay_mult: 1
+    }
+    param {
+        lr_mult: 2
+        decay_mult: 0
+    }
+    convolution_param {
+        num_output: 32
+        pad: 1
+        kernel_size: 3
+        stride: 1
+        weight_filler {
+            type: "xavier"
+            std: 0.1
+        }
+        bias_filler {
+            type: "constant"
+            value: 0.2
+        }
+    }
+}
+
+layer {
+  bottom: "Conv1"
+  top: "Conv1"
+  name: "Relu1"
+  type: "ReLU"
+}
+layer {
+    name: "Conv1_2"
+    type: "Convolution"
+    bottom: "Conv1"
+    top: "Conv1_2"
+    param {
+        lr_mult: 1
+        decay_mult: 1
+    }
+    param {
+        lr_mult: 2
+        decay_mult: 0
+    }
+    convolution_param {
+        num_output: 32
+        pad: 1
+        kernel_size: 3
+        stride: 1
+        weight_filler {
+            type: "xavier"
+            std: 0.1
+        }
+        bias_filler {
+            type: "constant"
+            value: 0.2
+        }
+    }
+}
+
+layer {
+  bottom: "Conv1_2"
+  top: "Conv1_2"
+  name: "Relu1_2"
+  type: "ReLU"
+}
+layer {
+    name: "Pool1"
+    type: "Pooling"
+    bottom: "Conv1_2"
+    top: "Pool1"
+    pooling_param {
+        pool: MAX
+        kernel_size: 2
+        stride: 2
+    }
+}
+
+layer {
+    name: "Conv2"
+    type: "Convolution"
+    bottom: "Pool1"
+    top: "Conv2"
+    param {
+        lr_mult: 1
+        decay_mult: 1
+    }
+    param {
+        lr_mult: 2
+        decay_mult: 0
+    }
+    convolution_param {
+        num_output: 64
+        pad: 1
+        kernel_size: 3
+        stride: 1
+        weight_filler {
+        type: "xavier"
+        std: 0.1
+    }
+    bias_filler {
+        type: "constant"
+        value: 0.2
+        }
+    }
+}
+
+layer {
+  bottom: "Conv2"
+  top: "Conv2"
+  name: "Relu2"
+  type: "ReLU"
+}
+layer {
+    name: "Conv2_2"
+    type: "Convolution"
+    bottom: "Conv2"
+    top: "Conv2_2"
+    param {
+        lr_mult: 1
+        decay_mult: 1
+    }
+    param {
+        lr_mult: 2
+        decay_mult: 0
+    }
+    convolution_param {
+        num_output: 64
+        pad: 1
+        kernel_size: 3
+        stride: 1
+        weight_filler {
+        type: "xavier"
+        std: 0.1
+    }
+    bias_filler {
+        type: "constant"
+        value: 0.2
+        }
+    }
+}
+
+layer {
+  bottom: "Conv2_2"
+  top: "Conv2_2"
+  name: "Relu2_2"
+  type: "ReLU"
+}
+layer {
+    name: "Pool2"
+    type: "Pooling"
+    bottom: "Conv2_2"
+    top: "Pool2"
+    pooling_param {
+        pool: MAX
+        kernel_size: 2
+        stride: 2
+    }
+}
+
+# layer 3
+layer {
+    name: "Conv3"
+    type: "Convolution"
+    bottom: "Pool2"
+    top: "Conv3"
+    param {
+        lr_mult: 1
+        decay_mult: 1
+    }
+    param {
+        lr_mult: 2
+        decay_mult: 0
+    }
+    convolution_param {
+        num_output: 128
+        pad: 1
+        kernel_size: 3
+        stride: 1
+        weight_filler {
+            type: "xavier"
+            std: 0.1
+        }
+        bias_filler {
+            type: "constant"
+            value: 0.2
+        }
+    }
+}
+
+
+layer {
+  bottom: "Conv3"
+  top: "Conv3"
+  name: "Relu3"
+  type: "ReLU"
+}
+layer {
+    name: "Conv3_2"
+    type: "Convolution"
+    bottom: "Conv3"
+    top: "Conv3_2"
+    param {
+        lr_mult: 1
+        decay_mult: 1
+    }
+    param {
+        lr_mult: 2
+        decay_mult: 0
+    }
+    convolution_param {
+        num_output: 128
+        pad: 1
+        kernel_size: 3
+        stride: 1
+        weight_filler {
+            type: "xavier"
+            std: 0.1
+        }
+        bias_filler {
+            type: "constant"
+            value: 0.2
+        }
+    }
+}
+
+
+layer {
+  bottom: "Conv3_2"
+  top: "Conv3_2"
+  name: "Relu3_2"
+  type: "ReLU"
+}
+layer {
+    name: "Pool3"
+    type: "Pooling"
+    bottom: "Conv3_2"
+    top: "Pool3"
+    pooling_param {
+        pool: MAX
+        kernel_size: 2
+        stride: 2
+    }
+}
+
+# layer 4
+layer {
+    name: "Conv4"
+    type: "Convolution"
+    bottom: "Pool3"
+    top: "Conv4"
+    param {
+        lr_mult: 1
+        decay_mult: 1
+    }
+    param {
+        lr_mult: 2
+        decay_mult: 0
+    }
+    convolution_param {
+        num_output: 256
+        pad: 1
+        kernel_size: 3
+        stride: 1
+        weight_filler {
+            type: "xavier"
+            std: 0.1
+        }
+        bias_filler {
+            type: "constant"
+            value: 0.2
+        }
+    }
+}
+
+
+layer {
+  bottom: "Conv4"
+  top: "Conv4"
+  name: "Relu4"
+  type: "ReLU"
+}
+layer {
+    name: "Conv4_2"
+    type: "Convolution"
+    bottom: "Conv4"
+    top: "Conv4_2"
+    param {
+        lr_mult: 1
+        decay_mult: 1
+    }
+    param {
+        lr_mult: 2
+        decay_mult: 0
+    }
+    convolution_param {
+        num_output: 256
+        pad: 1
+        kernel_size: 3
+        stride: 1
+        weight_filler {
+            type: "xavier"
+            std: 0.1
+        }
+        bias_filler {
+            type: "constant"
+            value: 0.2
+        }
+    }
+}
+
+
+layer {
+  bottom: "Conv4_2"
+  top: "Conv4_2"
+  name: "Relu4_2"
+  type: "ReLU"
+}
+layer {
+    name: "Pool4"
+    type: "Pooling"
+    bottom: "Conv4_2"
+    top: "Pool4"
+    pooling_param {
+        pool: MAX
+        kernel_size: 2
+        stride: 2
+    }
+}
+########################################
+
+
+
+
+layer {
+    name: "Dense2"
+    type: "InnerProduct"
+    bottom: "Pool4"
+    top: "Dense2"
+    param {
+        lr_mult: 1
+        decay_mult: 1
+    }
+    param {
+        lr_mult: 2
+        decay_mult: 0
+    }
+    inner_product_param {
+        num_output: 42
+        weight_filler {
+            type: "xavier"
+        }
+        bias_filler {
+            type: "constant"
+            value: 0
+        }
+    }
+}
+
+
+layer {
+    	name: "loss"
+    	type: "EuclideanLoss"
+    	bottom: "Dense2"
+    	bottom: "landmarks"
+    	top: "loss"
+        loss_weight: 0.9
+}
