@@ -8,12 +8,15 @@ import numpy as np
 import h5py
 import tensorflow as tf
 from random import random
-from skimage.transform import resize
+from skimage.transform import resize, rotate
 
 import os
 from math import floor, ceil
 from cv2 import imread, imwrite
 from dlib_face_detection import dlib_file_list
+from config import ModelConfig
+
+import math
 
 import cv2
 
@@ -81,6 +84,8 @@ def random_augmentation(scale=None,
                         random_filp_vertical=0.5,
                         random_noise=None,
                         random_landmark_mask=0.5,
+                        random_rotate=0.5,
+                        random_squeeze=[0.5, 6],
                         test=False):
     """Random augmentate dataset wrapper for parameters.
     Params:
@@ -118,6 +123,23 @@ def random_augmentation(scale=None,
                 tmp_zeros[base_x:(shape_aft[0]+base_x), base_y:(shape_aft[1]+base_y)] = tmp_img
                 tmp_img = tmp_zeros
 
+        if random_squeeze is not None:
+            if random() < random_squeeze[0]:
+                tmp_zeros = np.zeros(shape_ori)
+                shape_aft = [floor(tmp * (1.0 - 1.0 / random_squeeze[1])) for tmp in shape_ori[:2]]
+                if random() > 0.5:
+                    dir = 'x'
+                    shape_aft[1] = shape_ori[1]
+                    tmp_lab[1::2] = tmp_lab[1::2] * (1.0 - 1.0 / random_squeeze[1])
+                else:
+                    dir = 'y'
+                    shape_aft[0] = shape_ori[0]
+                    tmp_lab[0::2] = tmp_lab[0::2] * (1.0 - 1.0 / random_squeeze[1])
+
+                tmp_img = resize(tmp_img, shape_aft)
+                tmp_zeros[0:shape_aft[0], 0:shape_aft[1]] = tmp_img
+                tmp_img = tmp_zeros
+
         if dirty_circle is not None:
             if random() < dirty_circle:
                 # add some mask
@@ -133,6 +155,18 @@ def random_augmentation(scale=None,
                     rand_x = int(random() * (min(shape_ori[:2]) - rand_w - 1))
                     rand_y = int(random() * (min(shape_ori[:2]) - rand_w - 1))
                     cv2.rectangle(tmp_img, (rand_x, rand_y), (rand_x+rand_w, rand_y+rand_w), rand_color, -1)
+
+        if random_rotate is not None:
+            if random() < random_rotate:
+                tmp_img[tmp_img > 1] = 1
+                tmp_angle = (random() - 0.5) * 20
+                tmp_img = rotate(tmp_img, angle=tmp_angle)
+                center = np.array(tmp_img.shape[:2]) / 2 - 0.5
+                for tmp_idx in range(int(len(tmp_lab) / 2)):
+                    x = tmp_lab[tmp_idx*2] - center[0]
+                    y = tmp_lab[tmp_idx*2+1] - center[1]
+                    tmp_lab[tmp_idx*2] = x*math.cos(tmp_angle*3.1416/180) + y*math.sin(tmp_angle*3.1416/180) + center[0]
+                    tmp_lab[tmp_idx*2+1] = -x*math.sin(tmp_angle*3.1416/180) + y*math.cos(tmp_angle*3.1416/180) + center[1]
 
         if random_filp_vertical is not None:
             if random() < random_filp_vertical:
@@ -165,24 +199,28 @@ def random_augmentation(scale=None,
                     rand_y = int(tmp_lab[2 * rand_landmark + 1])
                     if not max([rand_x+rand_w, rand_y+rand_w]) > min(shape_ori):
                         cv2.rectangle(tmp_img, (rand_x, rand_y), (rand_x+rand_w, rand_y+rand_w), rand_color, -1)
-        if not test:
-            tmp_img = (tmp_img - np.mean(tmp_img)) / np.std(tmp_img)
+        # if not test:
+        #     tmp_img = (tmp_img - np.mean(tmp_img)) / np.std(tmp_img)
         return [np.array(tmp_img), np.array(tmp_lab)]
     return random_augmentation_func
 
-random_aug_func = random_augmentation(scale=(0.3, 8),
-                                      dirty_circle=0.4,
-                                      random_flip_horizontal=0.29,
-                                      random_filp_vertical=0.29,
-                                      random_landmark_mask=0.4)
+random_aug_func = random_augmentation(scale=(0.4, 6),
+                                      dirty_circle=0.3,
+                                      random_flip_horizontal=None,
+                                      random_filp_vertical=None,
+                                      random_landmark_mask=0.3,
+                                      random_squeeze=[0.4, 6],
+                                      random_rotate=0.9)
 
 def test_aug():
 
-    func = random_augmentation(scale=(0.5, 8),
-                              dirty_circle=0.2,
-                              random_flip_horizontal=0.5,
-                              random_filp_vertical=0.2,
-                              random_landmark_mask=0.2,
+    func = random_augmentation(scale=(0.4, 6),
+                              dirty_circle=0.3,
+                              random_flip_horizontal=None,
+                              random_filp_vertical=None,
+                              random_landmark_mask=0.3,
+                              random_squeeze=[0.4, 6],
+                              random_rotate=0.7,
                                test=True)
     ds = dlib_file_list([r'C:\Users\Jackie\AppData\Roaming\feiq\Recv Files\25points_selected'])
     filenames = [ds[i][0] for i in range(len(ds))]
@@ -217,17 +255,32 @@ def distort_tf_function(image, label):
     image: A float32 Tensor of shape [height, width, 3] with values in [0, 1).
     """
     with tf.name_scope("distort_color", values=[image]):
-        image = tf.image.random_brightness(image, max_delta=10.0/255)
-        image = tf.image.random_saturation(image, lower=0.15/255.0, upper=1.15/255)
-        image = tf.image.random_hue(image, max_delta=0.01/255)
-        image = tf.image.random_contrast(image, lower=0.15/255.0, upper=1.15/255.0)
-        image = tf.clip_by_value(image, 0.0, 255.0/255)
+        image = tf.image.random_brightness(image, max_delta=0.1/255)
+        image = tf.image.random_saturation(image, lower=0.015/255.0, upper=1.015/255)
+        image = tf.image.random_hue(image, max_delta=0.001/255)
+        image = tf.image.random_contrast(image, lower=0.015/255.0, upper=1.015/255.0)
 
     return image, label
 
 def resize_img(img, label, shape):
-  img = tf.image.resize_images(img, shape)
-  return img, label
+    img.set_shape([None, None, None])
+    img = tf.image.resize_images(img, shape)
+    return img, label
+
+def _coord2imgs(label):
+    label_zeros = np.zeros([40, 40, 21], dtype=np.float32)
+    for idx in range(21):
+        x = floor(40*label[2*idx])
+        if x >= 40:
+            x = 39
+        y = floor(40*label[2*idx+1])
+        if y >= 40:
+            y = 39
+        label_zeros[x, y, idx] = 1.0
+    return label_zeros
+
+def imgs2coord(label):
+    
 
 def read_py_function(filename, label):
     img = imread(filename.decode())
@@ -236,8 +289,9 @@ def read_py_function(filename, label):
     img = img / 255
     label = np.array(label, dtype=np.float32)
     img, label = random_aug_func([img, label])
-    label[::2] = label[::2] / s[1]
-    label[1::2] = label[1::2] / s[0]
+    label[::2] = 1.0 * label[::2] / s[1]
+    label[1::2] = 1.0 * label[1::2] / s[0]
+    # label = coord2imgs(label)
     return img.astype(np.float32), label.astype(np.float32)
 
 def read_py_function_no_aug(filename, label):
@@ -246,8 +300,9 @@ def read_py_function_no_aug(filename, label):
     img = img.astype(np.float32)
     img = img / 255
     label = np.array(label, dtype=np.float32)
-    label[::2] = label[::2] / s[1]
-    label[1::2] = label[1::2] / s[0]
+    label[::2] = 1.0 * label[::2] / s[1]
+    label[1::2] = 1.0 * label[1::2] / s[0]
+    # label = coord2imgs(label)
     return img.astype(np.float32), label.astype(np.float32)
 
 
@@ -279,12 +334,12 @@ def get_dataset_from_file(config=None):
         if is_train:
             dataset = dataset.map(
                 lambda filename, label: tuple(tf.py_func(
-                    read_py_function, [filename, label], [tf.float32, tf.float32])), num_threads=512)
+                    read_py_function, [filename, label], [tf.float32, tf.float32])), num_threads=256)
         else:
             dataset = dataset.map(
                 lambda filename, label: tuple(tf.py_func(
                     read_py_function_no_aug, [filename, label], [tf.float32, tf.float32])), num_threads=128)
-        dataset = dataset.map(distort_tf_function, num_threads=64)
+        # dataset = dataset.map(distort_tf_function, num_threads=64)
         dataset = dataset.map(lambda i, l: resize_img(i, l, [config.width, config.height]), num_threads=64)
         dataset = dataset.shuffle(buffer_size=config.shuffle_buffer_size)
         dataset = dataset.batch(config.batch_size)
@@ -310,19 +365,42 @@ def get_dataset_from_h5(config):
 
     return train_ds, test_ds, info
 
-def test():
-    train_ds = dlib_file_list()
-    np.random.shuffle(train_ds)
-    filenames = [train_ds[i][0] for i in range(len(train_ds))]
-    labels = [train_ds[i][1] for i in range(len(train_ds))]
-    dataset = read_fn_0(filenames, labels)
-    dataset = dataset.map(
-        lambda filename, label: tuple(tf.py_func(
-            read_py_function, [filename, label], [tf.float32, tf.float32])), num_threads=256)
-    dataset = dataset.map(distort_tf_function)
-    dataset = dataset.map(lambda i, l: resize_img(i, l, [40, 40]), num_threads=256)
-    dataset = dataset.shuffle(buffer_size=1000)
-    dataset = dataset.batch(32)
-    return test_dataset(dataset)
+def test_dataset_save_img():
+    # train_ds = dlib_file_list()
+    # np.random.shuffle(train_ds)
+    # filenames = [train_ds[i][0] for i in range(len(train_ds))]
+    # labels = [train_ds[i][1] for i in range(len(train_ds))]
+    # dataset = read_fn_0(filenames, labels)
+    # dataset = dataset.map(
+    #     lambda filename, label: tuple(tf.py_func(
+    #         read_py_function, [filename, label], [tf.float32, tf.float32])), num_threads=256)
+    # # dataset = dataset.map(distort_tf_function)
+    # dataset = dataset.map(lambda i, l: resize_img(i, l, [40, 40]), num_threads=256)
+    # dataset = dataset.shuffle(buffer_size=1000)
+    # dataset = dataset.batch(32)
+    model_config = ModelConfig()
+    model_config.width = 40
+    model_config.height = 40
+    model_config.channels = 3
+    model_config.train_ratio = 0.8
+    model_config.shuffle_buffer_size = 512
+    model_config.batch_size = 32
+
+    train_ds, test_ds, info = get_dataset_from_file(model_config)
+    dataset = train_ds
+    test_result = test_dataset(dataset)
+    print(len(test_result))
+    print(len(test_result[0]))
+    img = test_result[0][0]
+    s = img.shape
+    img = img * 255
+    img = img.astype(np.uint8)
+    print(s)
+    label = test_result[1][0]
+    print(label.shape)
+    l = len(label)
+    for t in range(int(l/2)):
+        cv2.circle(img, (int(s[0]*label[2 * t]), int(s[1]*label[2*t+1])), 2, (0, 0, 255), -1)
+    imwrite(('test.jpg'), img)
 
 
