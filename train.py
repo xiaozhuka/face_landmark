@@ -22,7 +22,7 @@ min_test_cost = 1e4
 #####################  model config#################################
 ####################################################################
 model_config = ModelConfig()
-model_config.summary_path = r'E:\python_vanilla\log_dir\test_2018_4_18_2'
+model_config.summary_path = r'E:\python_vanilla\log_dir\test_2018_4_19_5'
 # model_config.summary_path = r'/home/cuishi/zcq/python_vanilla/log_dir/test'
 if not os.path.isdir(model_config.summary_path):
     os.mkdir(model_config.summary_path)
@@ -30,7 +30,7 @@ model_config.width = 40
 model_config.height = 40
 model_config.channels = 3
 model_config.min_save_name = os.path.join(model_config.summary_path, 'min_loss.model')
-model_config.batch_size = 64
+model_config.batch_size = 64+16
 model_config.landmark_num = 21
 model_config.weight_decay = 1e-3
 model_config.bias_decay = 1e-3
@@ -39,15 +39,17 @@ model_config.test_path = r'E:\data\ImageList_facepose_25pointsSELECTED_test_exMO
 # model_config.train_path = r'/home/cuishi/zcq/data/ImageList_facepose_25pointsSELECTED_train_ex8_RESIZE50_noFlip_noShuffle.h5'
 # model_config.test_path = r'/home/cuishi/zcq/data/ImageList_facepose_25pointsSELECTED_test_exMODI8_RESIZE50_noFlip_noShuffle.h5'
 model_config.data_paths = ['data', 'landmarks']
-model_config.max_epoch = 15
-model_config.shuffle_buffer_size = 512 + 256
+model_config.max_epoch = 20
+model_config.shuffle_buffer_size = 256
 model_config.clip_grad = False
 model_config.summary_frequency = 100
 model_config.padding_way = 'SAME'
 model_config.learning_rate = 1e-3
 model_config.valid_dataset = r"E:\fld_result\facepose"
-model_config.train_ratio = 0.8
+model_config.train_ratio = 0.9
 model_config.restore = False
+model_config.bn = False
+model_config.loss_amp = 10.0
 
 
 ##############################################################
@@ -76,7 +78,8 @@ test_next_element = test_iterator.get_next()
 ############## build model #######################
 ##################################################
 images = tf.placeholder(tf.float32, [None, model_config.width, model_config.height, model_config.channels], 'images')
-labels = tf.placeholder(tf.float32, [None, 2*model_config.landmark_num], 'labels')
+# labels = tf.placeholder(tf.float32, [None, 2*model_config.landmark_num], 'labels')
+labels = tf.placeholder(tf.float32, [None, model_config.width, model_config.height, model_config.landmark_num], 'labels')
 is_training = tf.Variable(True, dtype=tf.bool)
 model = OrdinaryCNNModel(model_config, images, labels, is_training)
 model.build()
@@ -98,7 +101,7 @@ global_step = tf.Variable(
 boundaries = [x for x in np.array([int(2000),
                                      int(21000)],
                                     dtype=np.int32)]
-staged_lr = [x for x in [0.005, 1e-3, 1e-4]]
+staged_lr = [x for x in [0.002, 1e-3, 1e-4]]
 learning_rate = tf.train.piecewise_constant(global_step,
                                               boundaries, staged_lr)
 # learning_rate = tf.train.exponential_decay(model_config.learning_rate,
@@ -146,6 +149,7 @@ with tf.Session(config=sess_config) as sess:
     summary_writer = tf.summary.FileWriter(model_config.summary_path, sess.graph)
 
     for epoch_idx in range(model_config.max_epoch):
+        sess.run(assing_is_training_true_op)
         sess.run(train_iterator.initializer)
         sess.run(test_iterator.initializer)
         starttime = datetime.datetime.now()
@@ -185,15 +189,28 @@ with tf.Session(config=sess_config) as sess:
                         epoch_idx+1, time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())))
 
                 # test
+                tmp_test_count = 0
                 while True:
                     try:
+                        tmp_test_count += 1
                         imgs, labs = sess.run(test_next_element)
-
                         feed_dict = {images: imgs,
                                      labels: labs}
-                        _tmp_test_loss = sess.run([loss], feed_dict=feed_dict)[0]
+                        _tmp_test_loss, test_labs = sess.run([loss, face_feature_result], feed_dict=feed_dict)
                         # t_l = tf.get_variable(name="test_loss")
                         tmp_test_loss.append(_tmp_test_loss)
+
+                        if tmp_test_count < 10:
+                            for tmp_idx in range(1):
+                                img_ori = imgs[tmp_idx]
+                                img_ori = img_ori * 255
+                                img_ori = img_ori.astype(np.uint8)
+                                landmark = test_labs[tmp_idx]
+                                for t in range(int(model_config.landmark_num)):
+                                    cv2.circle(img_ori, (int(round(model_config.width * landmark[2 * t])),
+                                                         int(round(model_config.height * landmark[2 * t + 1]))), 1, (0, 0, 255),
+                                               -1)
+                                imwrite(os.path.join(model_config.summary_path, "test_%d_steps_%d_%d.jpg"%(total_step, tmp_test_count, tmp_idx)), img_ori.astype(np.uint8))
 
                     except tf.errors.OutOfRangeError:
                         tmp_test_cost = np.mean(tmp_test_loss)
@@ -219,9 +236,9 @@ with tf.Session() as sess:
             continue
         img_ori = imread(os.path.join(model_config.valid_dataset, single_img))
         img_ori_shape = img_ori.shape
-        img_resized = resize(img_ori, (model_config.height, model_config.width))
-        img_feed = img_resized.copy()
-        img_feed = (img_feed - np.mean(img_feed)) / np.std(img_feed)
+        img_resized = img_ori.copy()
+        img_feed = resize(img_resized, (model_config.height, model_config.width))
+        # img_feed = (img_feed - np.mean(img_feed)) / np.std(img_feed)
         img_feed = img_feed[None, ...]
         val_result = sess.run([face_feature_result], feed_dict={images: img_feed})
 
@@ -229,7 +246,7 @@ with tf.Session() as sess:
 
         # print(landmark)
         for t in range(int(model_config.landmark_num)):
-            cv2.circle(img_ori, (int(img_ori_shape[0] * landmark[0, 2*t]), int(img_ori_shape[1] *landmark[0, 2*t+1])), 2, (255, 0, 0), -1)
+            cv2.circle(img_ori, (int(round(img_ori_shape[0]*landmark[0, 2*t])), int(round(img_ori_shape[1]*landmark[0, 2*t+1]))), 2, (0, 0, 255), -1)
         imwrite(os.path.join(model_config.summary_path, single_img), img_ori.astype(np.uint8))
 
 
