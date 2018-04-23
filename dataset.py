@@ -267,7 +267,7 @@ def resize_img(img, label, shape):
     img = tf.image.resize_images(img, shape)
     return img, label
 
-def _coord2imgs(label):
+def coord2imgs(label):
     label_zeros = np.zeros([40, 40, 21], dtype=np.float32)
     for idx in range(21):
         x = floor(40*label[2*idx])
@@ -280,7 +280,22 @@ def _coord2imgs(label):
     return label_zeros
 
 def imgs2coord(label):
-    
+    l_list = []
+    if label.ndim == 3:
+        for idx in range(label.shape[-1]):
+            max_idx = np.argmax(label[:, :, idx])
+            l_list += [ max_idx % label.shape[1], floor(max_idx / label.shape[0]) ]
+    elif label.ndim == 2:
+        sort_idx = np.argsort(label, axis=None)[-21:]
+        for idx in sort_idx[::-1]:
+            l_list += [idx % label.shape[1], floor(idx / label.shape[0])]
+    else:
+        assert 0, "label.ndim must be equal to 3 or 2"
+    l_list = np.array(l_list, dtype=np.float32)
+    l_list[::2] = 1.0 * l_list[::2] / label.shape[1]
+    l_list[1::2] = 1.0 * l_list[1::2] / label.shape[0]
+    return l_list
+
 
 def read_py_function(filename, label):
     img = imread(filename.decode())
@@ -291,7 +306,7 @@ def read_py_function(filename, label):
     img, label = random_aug_func([img, label])
     label[::2] = 1.0 * label[::2] / s[1]
     label[1::2] = 1.0 * label[1::2] / s[0]
-    # label = coord2imgs(label)
+    label = coord2imgs(label)
     return img.astype(np.float32), label.astype(np.float32)
 
 def read_py_function_no_aug(filename, label):
@@ -302,7 +317,7 @@ def read_py_function_no_aug(filename, label):
     label = np.array(label, dtype=np.float32)
     label[::2] = 1.0 * label[::2] / s[1]
     label[1::2] = 1.0 * label[1::2] / s[0]
-    # label = coord2imgs(label)
+    label = coord2imgs(label)
     return img.astype(np.float32), label.astype(np.float32)
 
 

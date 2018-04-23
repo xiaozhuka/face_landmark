@@ -15,14 +15,14 @@ import numpy as np
 from cv2 import resize, imread
 
 tf.logging.set_verbosity(tf.logging.INFO)
-min_test_cost = 1e4
+min_test_cost = 1e7
 # ONLY_VALID = True
 
 ####################################################################
 #####################  model config#################################
 ####################################################################
 model_config = ModelConfig()
-model_config.summary_path = r'E:\python_vanilla\log_dir\test_2018_4_19_5'
+model_config.summary_path = r'E:\python_vanilla\log_dir\test_2018_4_23_5'
 # model_config.summary_path = r'/home/cuishi/zcq/python_vanilla/log_dir/test'
 if not os.path.isdir(model_config.summary_path):
     os.mkdir(model_config.summary_path)
@@ -39,7 +39,7 @@ model_config.test_path = r'E:\data\ImageList_facepose_25pointsSELECTED_test_exMO
 # model_config.train_path = r'/home/cuishi/zcq/data/ImageList_facepose_25pointsSELECTED_train_ex8_RESIZE50_noFlip_noShuffle.h5'
 # model_config.test_path = r'/home/cuishi/zcq/data/ImageList_facepose_25pointsSELECTED_test_exMODI8_RESIZE50_noFlip_noShuffle.h5'
 model_config.data_paths = ['data', 'landmarks']
-model_config.max_epoch = 20
+model_config.max_epoch = 200
 model_config.shuffle_buffer_size = 256
 model_config.clip_grad = False
 model_config.summary_frequency = 100
@@ -48,7 +48,7 @@ model_config.learning_rate = 1e-3
 model_config.valid_dataset = r"E:\fld_result\facepose"
 model_config.train_ratio = 0.9
 model_config.restore = False
-model_config.bn = False
+model_config.bn = True
 model_config.loss_amp = 10.0
 
 
@@ -206,6 +206,8 @@ with tf.Session(config=sess_config) as sess:
                                 img_ori = img_ori * 255
                                 img_ori = img_ori.astype(np.uint8)
                                 landmark = test_labs[tmp_idx]
+                                landmark = imgs2coord(landmark)
+                                # print(landmark)
                                 for t in range(int(model_config.landmark_num)):
                                     cv2.circle(img_ori, (int(round(model_config.width * landmark[2 * t])),
                                                          int(round(model_config.height * landmark[2 * t + 1]))), 1, (0, 0, 255),
@@ -243,6 +245,8 @@ with tf.Session() as sess:
         val_result = sess.run([face_feature_result], feed_dict={images: img_feed})
 
         landmark = val_result[0]
+
+        landmark = imgs2coord(landmark)
 
         # print(landmark)
         for t in range(int(model_config.landmark_num)):
