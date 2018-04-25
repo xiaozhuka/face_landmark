@@ -54,7 +54,7 @@ class OrdinaryCNNModel():
                 net += orig
             tf.summary.histogram('conv1_output', net)
             # max_pool2d(inputs, kernel_size, stride=2, padding='VALID')
-            # net = slim.max_pool2d(net, [2, 2], scope='pool1')
+            net = slim.max_pool2d(net, [2, 2], scope='pool1')
 
             if self.config.bn:
                 orig = net
@@ -71,43 +71,43 @@ class OrdinaryCNNModel():
             else:
                 net = slim.layers.dropout(net, is_training=is_training)
             tf.summary.histogram('conv2_output', net)
-            # net = slim.max_pool2d(net, [2, 2], scope='pool2')
+            net = slim.max_pool2d(net, [2, 2], scope='pool2')
 
             if self.config.bn:
                 orig = net
                 orig = slim.conv2d(orig, 128, [1, 1], padding=self.config.padding_way, scope='res/conv3')
-            net = slim.conv2d(net, 128, [3, 3], padding=self.config.padding_way, scope='conv3_1')
+            net = slim.conv2d(net, 256, [3, 3], padding=self.config.padding_way, scope='conv3_1')
 
             if self.config.bn:
                 net = batch_norm(net, is_training=is_training)
             else:
                 net = slim.layers.dropout(net, is_training=is_training)
 
-            net = slim.conv2d(net, 128, [3, 3], padding=self.config.padding_way, scope='conv3_2')
+            net = slim.conv2d(net, 256, [3, 3], padding=self.config.padding_way, scope='conv3_2')
             if self.config.bn:
                 net = batch_norm(net, is_training=is_training)
                 net += orig
             else:
                 net = slim.layers.dropout(net, is_training=is_training)
             tf.summary.histogram('conv3_output', net)
-            # net = slim.max_pool2d(net, [2, 2], scope='pool3')
+            net = slim.max_pool2d(net, [2, 2], scope='pool3')
 
 
-            # if self.config.bn:
-            #     orig = net
-            #     orig = slim.conv2d(orig, 128, [1, 1], padding=self.config.padding_way, scope='res/conv4')
-            # net = slim.conv2d(net, 128, [3, 3], padding=self.config.padding_way, scope='conv4_1')
-            #
-            # if self.config.bn:
-            #     net = batch_norm(net, is_training=is_training)
-            # else:
-            #     net = slim.layers.dropout(net, is_training=is_training)
-            #
-            # net = slim.conv2d(net, 128, [3, 3], padding=self.config.padding_way, scope='conv4_2')
-            # if self.config.bn:
-            #     net = batch_norm(net, is_training=is_training)
-            #     net += orig
-            # tf.summary.histogram('conv3_output', net)
+            if self.config.bn:
+                orig = net
+                orig = slim.conv2d(orig, 128, [1, 1], padding=self.config.padding_way, scope='res/conv4')
+            net = slim.conv2d(net, 128, [3, 3], padding=self.config.padding_way, scope='conv4_1')
+
+            if self.config.bn:
+                net = batch_norm(net, is_training=is_training)
+            else:
+                net = slim.layers.dropout(net, is_training=is_training)
+
+            net = slim.conv2d(net, 128, [3, 3], padding=self.config.padding_way, scope='conv4_2')
+            if self.config.bn:
+                net = batch_norm(net, is_training=is_training)
+                net += orig
+            tf.summary.histogram('conv3_output', net)
 
             # net = slim.max_pool2d(net, [2, 2], scope='pool4')
 
@@ -120,20 +120,27 @@ class OrdinaryCNNModel():
 
             # net = slim.max_pool2d(net, [2, 2], scope='pool4')
 
-            # net = slim.flatten(net, scope='flatten')
-            #
-            # net = slim.fully_connected(net, 256, scope='fc1')
-            # tf.summary.histogram('fc1_output', net)
-            # net = slim.fully_connected(net, self.config.landmark_num * 2, activation_fn=None, scope='fc2')
-            # tf.summary.histogram('fc2_output', net)
+            net = slim.flatten(net, scope='flatten')
 
-            net = slim.conv2d(net, self.config.landmark_num, [1, 1], activation_fn=None, padding=self.config.padding_way, scope='conv_output')
+            net = slim.fully_connected(net, 512, scope='fc1')
+            tf.summary.histogram('fc1_output', net)
+            net = slim.fully_connected(net, self.config.landmark_num * 2, activation_fn=None, scope='fc2')
+            tf.summary.histogram('fc2_output', net)
 
-        net = tf.sigmoid(net)
+            # net = slim.conv2d(net, 512, [1, 1], # activation_fn=None,
+            #                   padding=self.config.padding_way, scope='conv_output_1')
+            # net = slim.conv2d(net, self.config.landmark_num, [1, 1], activation_fn=None,
+            #                   padding=self.config.padding_way, scope='conv_output_2')
+            # tf.summary.histogram('conv_output', net)
+
+        # net = tf.sigmoid(net)
         self.output = net
 
-        self.loss = -tf.reduce_sum(tf.multiply(labels, tf.log(self.output))) - tf.reduce_sum(tf.multiply(1-labels, tf.log(1-self.output)))
-        # self.loss = self.config.loss_amp * tf.losses.mean_squared_error(labels, self.output)
+        # negative_point = tf.where(net < 0.3, 1 - labels, tf.zeros_like(labels))
+        # negative_point = 1 - labels
+
+        # self.loss = -tf.reduce_sum(500*tf.multiply(labels, tf.log(self.output + 1e-8))) - tf.reduce_sum(tf.multiply(negative_point, tf.log(1-self.output + 1e-8)))
+        self.loss = self.config.loss_amp * tf.losses.mean_squared_error(labels, self.output)
         tf.summary.scalar('loss', self.loss)
 
         regularization_losses = tf.get_collection(tf.GraphKeys.REGULARIZATION_LOSSES)

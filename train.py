@@ -22,7 +22,7 @@ min_test_cost = 1e7
 #####################  model config#################################
 ####################################################################
 model_config = ModelConfig()
-model_config.summary_path = r'E:\python_vanilla\log_dir\test_2018_4_23_5'
+model_config.summary_path = r'E:\python_vanilla\log_dir\test_2018_4_25_4'
 # model_config.summary_path = r'/home/cuishi/zcq/python_vanilla/log_dir/test'
 if not os.path.isdir(model_config.summary_path):
     os.mkdir(model_config.summary_path)
@@ -39,7 +39,7 @@ model_config.test_path = r'E:\data\ImageList_facepose_25pointsSELECTED_test_exMO
 # model_config.train_path = r'/home/cuishi/zcq/data/ImageList_facepose_25pointsSELECTED_train_ex8_RESIZE50_noFlip_noShuffle.h5'
 # model_config.test_path = r'/home/cuishi/zcq/data/ImageList_facepose_25pointsSELECTED_test_exMODI8_RESIZE50_noFlip_noShuffle.h5'
 model_config.data_paths = ['data', 'landmarks']
-model_config.max_epoch = 200
+model_config.max_epoch = 50
 model_config.shuffle_buffer_size = 256
 model_config.clip_grad = False
 model_config.summary_frequency = 100
@@ -48,7 +48,7 @@ model_config.learning_rate = 1e-3
 model_config.valid_dataset = r"E:\fld_result\facepose"
 model_config.train_ratio = 0.9
 model_config.restore = False
-model_config.bn = True
+model_config.bn = False
 model_config.loss_amp = 10.0
 
 
@@ -62,80 +62,84 @@ sess_config.gpu_options.allocator_type = "BFC"
 # sess_config.log_device_placement = True
 
 
-###########################################################
-################## get dataset ############################
-###########################################################
-# train_ds, test_ds, info = get_dataset_from_h5(model_config)
-train_ds, test_ds, info = get_dataset_from_file(model_config)
-tf.logging.info(info)
-train_iterator = train_ds.make_initializable_iterator()
-test_iterator = test_ds.make_initializable_iterator()
-train_next_element = train_iterator.get_next()
-test_next_element = test_iterator.get_next()
+with tf.device('/gpu:0'):
+
+    ###########################################################
+    ################## get dataset ############################
+    ###########################################################
+    # train_ds, test_ds, info = get_dataset_from_h5(model_config)
+    train_ds, test_ds, info = get_dataset_from_file(model_config)
+    tf.logging.info(info)
+    train_iterator = train_ds.make_initializable_iterator()
+    test_iterator = test_ds.make_initializable_iterator()
+    train_next_element = train_iterator.get_next()
+    test_next_element = test_iterator.get_next()
 
 
-##################################################
-############## build model #######################
-##################################################
-images = tf.placeholder(tf.float32, [None, model_config.width, model_config.height, model_config.channels], 'images')
-# labels = tf.placeholder(tf.float32, [None, 2*model_config.landmark_num], 'labels')
-labels = tf.placeholder(tf.float32, [None, model_config.width, model_config.height, model_config.landmark_num], 'labels')
-is_training = tf.Variable(True, dtype=tf.bool)
-model = OrdinaryCNNModel(model_config, images, labels, is_training)
-model.build()
-loss = model.cost
-face_feature_result = model.output
-# test_loss = tf.Variable(initial_value=0,
-#                         name='test_loss',
-#                         trainable=False,
-#                         dtype=tf.float32)
+    ##################################################
+    ############## build model #######################
+    ##################################################
+    images = tf.placeholder(tf.float32, [None, model_config.width, model_config.height, model_config.channels], 'images')
+    labels = tf.placeholder(tf.float32, [None, 2*model_config.landmark_num], 'labels')
+    # labels = tf.placeholder(tf.float32, [None, model_config.width, model_config.height, model_config.landmark_num], 'labels')
+    is_training = tf.Variable(True, dtype=tf.bool)
+    model = OrdinaryCNNModel(model_config, images, labels, is_training)
+    model.build()
+    loss = model.cost
+    face_feature_result = model.output
+    # test_loss = tf.Variable(initial_value=0,
+    #                         name='test_loss',
+    #                         trainable=False,
+    #                         dtype=tf.float32)
 
 
-# ----------------------------------------------------
-# learning rate
-global_step = tf.Variable(
-    initial_value=0,
-    name="global_step",
-    trainable=False,
-    collections=[tf.GraphKeys.GLOBAL_STEP, tf.GraphKeys.GLOBAL_VARIABLES])
-boundaries = [x for x in np.array([int(2000),
-                                     int(21000)],
-                                    dtype=np.int32)]
-staged_lr = [x for x in [0.002, 1e-3, 1e-4]]
-learning_rate = tf.train.piecewise_constant(global_step,
-                                              boundaries, staged_lr)
-# learning_rate = tf.train.exponential_decay(model_config.learning_rate,
-#                                            global_step=global_step,
-#                                            decay_steps=100,decay_rate=0.9)
-tf.summary.scalar('learning_rate', learning_rate)
+    # ----------------------------------------------------
+    # learning rate
+    global_step = tf.Variable(
+        initial_value=0,
+        name="global_step",
+        trainable=False,
+        collections=[tf.GraphKeys.GLOBAL_STEP, tf.GraphKeys.GLOBAL_VARIABLES])
+    boundaries = [x for x in np.array([int(12000),
+                                         int(21000)],
+                                        dtype=np.int32)]
+    staged_lr = [x for x in [1e-3, 1e-4, 1e-5]]
+    learning_rate = tf.train.piecewise_constant(global_step,
+                                                  boundaries, staged_lr)
+    # learning_rate = tf.train.exponential_decay(model_config.learning_rate,
+    #                                            global_step=global_step,
+    #                                            decay_steps=100,decay_rate=0.9)
+    tf.summary.scalar('learning_rate', learning_rate)
 
-# ---------------------------------------------------- #
-# optimizer
-optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
-# optimizer = tf.train.MomentumOptimizer(learning_rate=learning_rate, momentum=0.8, use_nesterov=True)
-grads = optimizer.compute_gradients(loss=loss)
-for i, (g, v) in enumerate(grads):
-    if g is not None:
-        if model_config.clip_grad:
-            g = tf.clip_by_norm(g, model_config.clip_grad)
-        grads[i] = (g, v)  # clip gradients
-        tf.summary.histogram('gradient/' + v.name[:-2], g)
+    # ---------------------------------------------------- #
+    # optimizer
+    optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate)
+    # optimizer = tf.train.MomentumOptimizer(learning_rate=learning_rate, momentum=0.8, use_nesterov=True)
+    grads = optimizer.compute_gradients(loss=loss)
+    for i, (g, v) in enumerate(grads):
+        if g is not None:
+            if model_config.clip_grad:
+                g = tf.clip_by_norm(g, model_config.clip_grad)
+            grads[i] = (g, v)  # clip gradients
+            tf.summary.histogram('gradient/' + v.name[:-2], g)
 
-updates_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
-with tf.control_dependencies(updates_ops):
-    train_op = optimizer.apply_gradients(grads, global_step=global_step)
-merged_summary_op = tf.summary.merge_all()
-
-
-# -------------------------------------------------------
-# is_training op
-assing_is_training_true_op = tf.assign(is_training, True)
-assing_is_training_false_op = tf.assign(is_training, False)
+    updates_ops = tf.get_collection(tf.GraphKeys.UPDATE_OPS)
+    with tf.control_dependencies(updates_ops):
+        train_op = optimizer.apply_gradients(grads, global_step=global_step)
+    merged_summary_op = tf.summary.merge_all()
 
 
+    # -------------------------------------------------------
+    # is_training op
+    assing_is_training_true_op = tf.assign(is_training, True)
+    assing_is_training_false_op = tf.assign(is_training, False)
 
-saver = tf.train.Saver()
-total_step = 0
+    saver = tf.train.Saver()
+    # Validation
+    saver_restore = tf.train.Saver()
+
+    total_step = 0
+
 with tf.Session(config=sess_config) as sess:
     init = tf.global_variables_initializer()
     sess.run(init)
@@ -206,7 +210,7 @@ with tf.Session(config=sess_config) as sess:
                                 img_ori = img_ori * 255
                                 img_ori = img_ori.astype(np.uint8)
                                 landmark = test_labs[tmp_idx]
-                                landmark = imgs2coord(landmark)
+                                # landmark = imgs2coord(landmark)
                                 # print(landmark)
                                 for t in range(int(model_config.landmark_num)):
                                     cv2.circle(img_ori, (int(round(model_config.width * landmark[2 * t])),
@@ -226,8 +230,7 @@ with tf.Session(config=sess_config) as sess:
                 break
 
 
-# Validation
-saver_restore = tf.train.Saver()
+
 with tf.Session() as sess:
 
     saver_restore.restore(sess, model_config.min_save_name)
@@ -239,19 +242,24 @@ with tf.Session() as sess:
         img_ori = imread(os.path.join(model_config.valid_dataset, single_img))
         img_ori_shape = img_ori.shape
         img_resized = img_ori.copy()
-        img_feed = resize(img_resized, (model_config.height, model_config.width))
+        img_resized = resize(img_resized, (model_config.height, model_config.width))
         # img_feed = (img_feed - np.mean(img_feed)) / np.std(img_feed)
-        img_feed = img_feed[None, ...]
+        img_feed = img_resized[None, ...]
         val_result = sess.run([face_feature_result], feed_dict={images: img_feed})
 
         landmark = val_result[0]
 
-        landmark = imgs2coord(landmark)
+        # landmark = imgs2coord(landmark)
 
-        # print(landmark)
         for t in range(int(model_config.landmark_num)):
-            cv2.circle(img_ori, (int(round(img_ori_shape[0]*landmark[0, 2*t])), int(round(img_ori_shape[1]*landmark[0, 2*t+1]))), 2, (0, 0, 255), -1)
+            cv2.circle(img_ori, (int(round(img_ori_shape[1]*landmark[0, 2*t])),
+                                 int(round(img_ori_shape[0]*landmark[0, 2*t+1]))), 3, (0, 0, 255), -1)
         imwrite(os.path.join(model_config.summary_path, single_img), img_ori.astype(np.uint8))
+
+        for t in range(int(model_config.landmark_num)):
+            cv2.circle(img_resized, (int(round(model_config.width*landmark[0, 2*t])),
+                                     int(round(model_config.height*landmark[0, 2*t+1]))), 1, (0, 0, 255), -1)
+        imwrite(os.path.join(model_config.summary_path, 'resized_'+single_img), img_ori.astype(np.uint8))
 
 
 with open(os.path.join(model_config.summary_path, 'min_loss.txt'), 'w') as f:

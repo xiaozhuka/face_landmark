@@ -13,6 +13,7 @@ def _file_list(path=[r'C:\Users\Jackie\AppData\Roaming\feiq\Recv Files\25points_
 
     ds = []
     for p in path:
+        print("process path %s"%p)
         for f in os.listdir(p):
             if f.endswith('txt'):
                 img_p = os.path.join(p, f[:-4]+'_0.jpg')
@@ -27,9 +28,12 @@ def _file_list(path=[r'C:\Users\Jackie\AppData\Roaming\feiq\Recv Files\25points_
     return ds
 
 def dlib_file_list(ipath=[r'C:\Users\Jackie\AppData\Roaming\feiq\Recv Files\25points_selected',
-            r'C:\Users\Jackie\AppData\Roaming\feiq\Recv Files\ce',
-            r'C:\Users\Jackie\AppData\Roaming\feiq\Recv Files\hu',
-            r'C:\Users\Jackie\AppData\Roaming\feiq\Recv Files\low'], pkl_f=None):
+                            r'C:\Users\Jackie\AppData\Roaming\feiq\Recv Files\ce',
+                            r'C:\Users\Jackie\AppData\Roaming\feiq\Recv Files\hu',
+                            r'C:\Users\Jackie\AppData\Roaming\feiq\Recv Files\low',
+                            r'C:\Users\Jackie\AppData\Roaming\feiq\Recv Files\21_points_1',
+                          r'C:\Users\Jackie\AppData\Roaming\feiq\Recv Files\21_points_2',
+                          r'C:\Users\Jackie\AppData\Roaming\feiq\Recv Files\21_points_3'], pkl_f=None):
     file_l = []
 
     if pkl_f is None:
@@ -63,11 +67,15 @@ def dlib_file_list(ipath=[r'C:\Users\Jackie\AppData\Roaming\feiq\Recv Files\25po
         try:
             io.imsave(new_img_path, new_img)
         except:
-            pass
+            print("Wrong in save %s"%new_img_path)
+            continue
+        print("%s saved"%new_img_path)
 
         file_l.append([new_img_path, landmark])
     with open(pkl_f, 'wb') as f:
         pickle.dump(file_l, f)
+    with open(pkl_f+'2', 'wb') as f:
+        pickle.dump(file_l, f, protocol=2)
     return file_l
 
 
@@ -94,5 +102,5 @@ def detection_dlib(parent):
             pass
 
 if __name__ == '__main__':
-    # dlib_file_list()
-    detection_dlib(r'E:\fld_result\facepose')
+    dlib_file_list()
+    # detection_dlib(r'E:\fld_result\facepose')

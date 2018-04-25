@@ -21,9 +21,12 @@ import math
 import cv2
 
 path=[r'C:\Users\Jackie\AppData\Roaming\feiq\Recv Files\25points_selected',
-            r'C:\Users\Jackie\AppData\Roaming\feiq\Recv Files\ce',
-            r'C:\Users\Jackie\AppData\Roaming\feiq\Recv Files\hu',
-            r'C:\Users\Jackie\AppData\Roaming\feiq\Recv Files\low']
+     r'C:\Users\Jackie\AppData\Roaming\feiq\Recv Files\ce',
+     r'C:\Users\Jackie\AppData\Roaming\feiq\Recv Files\hu',
+     r'C:\Users\Jackie\AppData\Roaming\feiq\Recv Files\low',
+     r'C:\Users\Jackie\AppData\Roaming\feiq\Recv Files\21_points_1',
+     r'C:\Users\Jackie\AppData\Roaming\feiq\Recv Files\21_points_2',
+     r'C:\Users\Jackie\AppData\Roaming\feiq\Recv Files\21_points_3']
 
 def cf2cl(img):
     """Channel first to channel last.
@@ -204,13 +207,13 @@ def random_augmentation(scale=None,
         return [np.array(tmp_img), np.array(tmp_lab)]
     return random_augmentation_func
 
-random_aug_func = random_augmentation(scale=(0.4, 6),
-                                      dirty_circle=0.3,
+random_aug_func = random_augmentation(scale=(0.3, 6),
+                                      dirty_circle=0.2,
                                       random_flip_horizontal=None,
                                       random_filp_vertical=None,
-                                      random_landmark_mask=0.3,
-                                      random_squeeze=[0.4, 6],
-                                      random_rotate=0.9)
+                                      random_landmark_mask=0.2,
+                                      random_squeeze=[0.3, 4],
+                                      random_rotate=0.5)
 
 def test_aug():
 
@@ -267,8 +270,13 @@ def resize_img(img, label, shape):
     img = tf.image.resize_images(img, shape)
     return img, label
 
-def coord2imgs(label):
-    label_zeros = np.zeros([40, 40, 21], dtype=np.float32)
+def coord2imgs(label, mod=0):
+    if mod == 0:
+        label_zeros = np.zeros([40, 40, 21], dtype=np.float32)
+    elif mod == 1:
+        label_zeros = np.zeros([40, 40], dtype=np.float32)
+    else:
+        assert 0, "mod must be 0 or 1"
     for idx in range(21):
         x = floor(40*label[2*idx])
         if x >= 40:
@@ -276,7 +284,10 @@ def coord2imgs(label):
         y = floor(40*label[2*idx+1])
         if y >= 40:
             y = 39
-        label_zeros[x, y, idx] = 1.0
+        if mod == 0:
+            label_zeros[x, y, idx] = 1.0
+        elif mod == 1:
+            label_zeros[x, y] = 1.0
     return label_zeros
 
 def imgs2coord(label):
@@ -306,7 +317,7 @@ def read_py_function(filename, label):
     img, label = random_aug_func([img, label])
     label[::2] = 1.0 * label[::2] / s[1]
     label[1::2] = 1.0 * label[1::2] / s[0]
-    label = coord2imgs(label)
+    # label = coord2imgs(label, mod=1)
     return img.astype(np.float32), label.astype(np.float32)
 
 def read_py_function_no_aug(filename, label):
@@ -317,7 +328,7 @@ def read_py_function_no_aug(filename, label):
     label = np.array(label, dtype=np.float32)
     label[::2] = 1.0 * label[::2] / s[1]
     label[1::2] = 1.0 * label[1::2] / s[0]
-    label = coord2imgs(label)
+    # label = coord2imgs(label, mod=1)
     return img.astype(np.float32), label.astype(np.float32)
 
 
@@ -334,6 +345,21 @@ def read_fn_0(filename, labels, config=None):
 
 def get_dataset_from_file(config=None):
     total_ds = dlib_file_list(path)
+
+    def _aug(ds):
+        result = []
+        for single_ds in ds:
+            if 'ce' in single_ds[0]:
+                result += 10*[single_ds]
+            elif 'low' in single_ds[0]:
+                result += 4*[single_ds]
+            else:
+                result.append(single_ds)
+
+        return result
+
+    total_ds =  _aug(total_ds)
+
     np.random.shuffle(total_ds)
     split_n = ceil(len(total_ds) * config.train_ratio)
     train_ds = total_ds[:split_n]
@@ -355,7 +381,7 @@ def get_dataset_from_file(config=None):
                 lambda filename, label: tuple(tf.py_func(
                     read_py_function_no_aug, [filename, label], [tf.float32, tf.float32])), num_threads=128)
         # dataset = dataset.map(distort_tf_function, num_threads=64)
-        dataset = dataset.map(lambda i, l: resize_img(i, l, [config.width, config.height]), num_threads=64)
+        dataset = dataset.map(lambda i, l: resize_img(i, l, [config.width, config.height]), num_threads=128)
         dataset = dataset.shuffle(buffer_size=config.shuffle_buffer_size)
         dataset = dataset.batch(config.batch_size)
         return dataset
