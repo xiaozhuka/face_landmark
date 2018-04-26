@@ -22,7 +22,7 @@ min_test_cost = 1e7
 #####################  model config#################################
 ####################################################################
 model_config = ModelConfig()
-model_config.summary_path = r'E:\python_vanilla\log_dir\test_2018_4_25_4'
+model_config.summary_path = r'E:\python_vanilla\log_dir\test_2018_4_26_2'
 # model_config.summary_path = r'/home/cuishi/zcq/python_vanilla/log_dir/test'
 if not os.path.isdir(model_config.summary_path):
     os.mkdir(model_config.summary_path)
@@ -30,6 +30,7 @@ model_config.width = 40
 model_config.height = 40
 model_config.channels = 3
 model_config.min_save_name = os.path.join(model_config.summary_path, 'min_loss.model')
+model_config.latest_save_name = os.path.join(model_config.summary_path, 'latest.model')
 model_config.batch_size = 64+16
 model_config.landmark_num = 21
 model_config.weight_decay = 1e-3
@@ -39,7 +40,7 @@ model_config.test_path = r'E:\data\ImageList_facepose_25pointsSELECTED_test_exMO
 # model_config.train_path = r'/home/cuishi/zcq/data/ImageList_facepose_25pointsSELECTED_train_ex8_RESIZE50_noFlip_noShuffle.h5'
 # model_config.test_path = r'/home/cuishi/zcq/data/ImageList_facepose_25pointsSELECTED_test_exMODI8_RESIZE50_noFlip_noShuffle.h5'
 model_config.data_paths = ['data', 'landmarks']
-model_config.max_epoch = 50
+model_config.max_epoch = 20
 model_config.shuffle_buffer_size = 256
 model_config.clip_grad = False
 model_config.summary_frequency = 100
@@ -100,10 +101,10 @@ with tf.device('/gpu:0'):
         name="global_step",
         trainable=False,
         collections=[tf.GraphKeys.GLOBAL_STEP, tf.GraphKeys.GLOBAL_VARIABLES])
-    boundaries = [x for x in np.array([int(12000),
-                                         int(21000)],
+    boundaries = [x for x in np.array([int(3000), int(22000),
+                                         int(41000)],
                                         dtype=np.int32)]
-    staged_lr = [x for x in [1e-3, 1e-4, 1e-5]]
+    staged_lr = [x for x in [1e-2, 1e-3, 1e-4, 1e-5]]
     learning_rate = tf.train.piecewise_constant(global_step,
                                                   boundaries, staged_lr)
     # learning_rate = tf.train.exponential_decay(model_config.learning_rate,
@@ -229,38 +230,42 @@ with tf.Session(config=sess_config) as sess:
                         break
                 break
 
+    saver.save(sess, model_config.latest_save_name)
 
+def _valid(model_saved=model_config.min_save_name, prefix='min_'):
+    with tf.Session(config=tf.ConfigProto(allow_soft_placement=True)) as sess:
 
-with tf.Session() as sess:
+        saver_restore.restore(sess, model_saved)
+        for single_img in os.listdir(model_config.valid_dataset):
+            if not single_img.endswith('.jpg'):
+                continue
+            if not single_img.startswith('dlib_'):
+                continue
+            img_ori = imread(os.path.join(model_config.valid_dataset, single_img))
+            img_ori = img_ori.astype(np.float32) / 255.0
+            img_ori_shape = img_ori.shape
+            img_resized = img_ori.copy()
+            img_resized = resize(img_resized, (model_config.height, model_config.width))
+            # img_feed = (img_feed - np.mean(img_feed)) / np.std(img_feed)
+            img_feed = img_resized[None, ...]
+            val_result = sess.run([face_feature_result], feed_dict={images: img_feed})
 
-    saver_restore.restore(sess, model_config.min_save_name)
-    for single_img in os.listdir(model_config.valid_dataset):
-        if not single_img.endswith('.jpg'):
-            continue
-        if not single_img.startswith('dlib_'):
-            continue
-        img_ori = imread(os.path.join(model_config.valid_dataset, single_img))
-        img_ori_shape = img_ori.shape
-        img_resized = img_ori.copy()
-        img_resized = resize(img_resized, (model_config.height, model_config.width))
-        # img_feed = (img_feed - np.mean(img_feed)) / np.std(img_feed)
-        img_feed = img_resized[None, ...]
-        val_result = sess.run([face_feature_result], feed_dict={images: img_feed})
+            landmark = val_result[0]
 
-        landmark = val_result[0]
+            img_ori = img_ori * 255
+            for t in range(int(model_config.landmark_num)):
+                cv2.circle(img_ori, (int(round(img_ori_shape[1]*landmark[0, 2*t])),
+                                     int(round(img_ori_shape[0]*landmark[0, 2*t+1]))), 3, (0, 0, 255), -1)
+            imwrite(os.path.join(model_config.summary_path, prefix+single_img), img_ori.astype(np.uint8))
 
-        # landmark = imgs2coord(landmark)
+            img_resized = img_resized * 255
+            for t in range(int(model_config.landmark_num)):
+                cv2.circle(img_resized, (int(round(model_config.width*landmark[0, 2*t])),
+                                         int(round(model_config.height*landmark[0, 2*t+1]))), 1, (0, 0, 255), -1)
+            imwrite(os.path.join(model_config.summary_path, prefix+'resized_'+single_img), img_resized.astype(np.uint8))
 
-        for t in range(int(model_config.landmark_num)):
-            cv2.circle(img_ori, (int(round(img_ori_shape[1]*landmark[0, 2*t])),
-                                 int(round(img_ori_shape[0]*landmark[0, 2*t+1]))), 3, (0, 0, 255), -1)
-        imwrite(os.path.join(model_config.summary_path, single_img), img_ori.astype(np.uint8))
-
-        for t in range(int(model_config.landmark_num)):
-            cv2.circle(img_resized, (int(round(model_config.width*landmark[0, 2*t])),
-                                     int(round(model_config.height*landmark[0, 2*t+1]))), 1, (0, 0, 255), -1)
-        imwrite(os.path.join(model_config.summary_path, 'resized_'+single_img), img_ori.astype(np.uint8))
-
+_valid(model_config.min_save_name, prefix='min_')
+_valid(model_saved=model_config.latest_save_name, prefix='latest_')
 
 with open(os.path.join(model_config.summary_path, 'min_loss.txt'), 'w') as f:
     f.write('Min loss in test set: %f.'%min_test_cost)
