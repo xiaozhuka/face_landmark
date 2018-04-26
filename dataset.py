@@ -207,13 +207,13 @@ def random_augmentation(scale=None,
         return [np.array(tmp_img), np.array(tmp_lab)]
     return random_augmentation_func
 
-random_aug_func = random_augmentation(scale=(0.3, 6),
+random_aug_func = random_augmentation(scale=(0.3, 8),
                                       dirty_circle=0.2,
                                       random_flip_horizontal=None,
                                       random_filp_vertical=None,
                                       random_landmark_mask=0.2,
-                                      random_squeeze=[0.3, 4],
-                                      random_rotate=0.5)
+                                      random_squeeze=[0.3, 6],
+                                      random_rotate=0.7)
 
 def test_aug():
 
@@ -350,9 +350,13 @@ def get_dataset_from_file(config=None):
         result = []
         for single_ds in ds:
             if 'ce' in single_ds[0]:
-                result += 10*[single_ds]
+                result += 2*6*[single_ds]
             elif 'low' in single_ds[0]:
-                result += 4*[single_ds]
+                result += 2*[single_ds]
+            elif '21_points_1' in single_ds[0]:
+                result += 2*[single_ds]
+            elif '21_points_3' in single_ds[0]:
+                result += 2 * [single_ds]
             else:
                 result.append(single_ds)
 
@@ -375,7 +379,7 @@ def get_dataset_from_file(config=None):
         if is_train:
             dataset = dataset.map(
                 lambda filename, label: tuple(tf.py_func(
-                    read_py_function, [filename, label], [tf.float32, tf.float32])), num_threads=256)
+                    read_py_function, [filename, label], [tf.float32, tf.float32])), num_threads=512)
         else:
             dataset = dataset.map(
                 lambda filename, label: tuple(tf.py_func(
