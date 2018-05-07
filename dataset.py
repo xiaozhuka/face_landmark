@@ -343,6 +343,36 @@ def read_fn_0(filename, labels, config=None):
     # dataset = dataset.map(lambda f, l: _preprocess_tf_func(f, l, config), num_thread=32)
     return dataset
 
+def get_finetune_dataset_from_file(config=None):
+    img_f = open(r'E:\landmark_cpp\landmark_cpp\landmark_cpp\face_detection\img_list_finetune.txt', 'r')
+    landmark_f = open(r'E:\landmark_cpp\landmark_cpp\landmark_cpp\face_detection\landmark_listfinetune.txt', 'r')
+    finetune_ds = list(zip(list(img_f.readlines()), list(landmark_f.readlines())))
+    img_f.close()
+    landmark_f.close()
+    np.random.shuffle(finetune_ds)
+    def _f(ds, is_train=True):
+        filenames = [ds[i][0].strip() for i in range(len(ds)) if len(ds[i][1])>2]
+        labels = [ds[i][1] for i in range(len(ds)) if len(ds[i][1])>2]
+        labels = [[float(i) for i in s.split()[:(config.landmark_num*2)]] for s in labels]
+        labels = np.array(labels, dtype=np.float32)
+        dataset = read_fn_0(filenames, labels)
+
+        if is_train:
+            dataset = dataset.map(
+                lambda filename, label: tuple(tf.py_func(
+                    read_py_function, [filename, label], [tf.float32, tf.float32])), num_threads=256)
+        else:
+            dataset = dataset.map(
+                lambda filename, label: tuple(tf.py_func(
+                    read_py_function_no_aug, [filename, label], [tf.float32, tf.float32])), num_threads=96)
+        # dataset = dataset.map(distort_tf_function, num_threads=64)
+        dataset = dataset.map(lambda i, l: resize_img(i, l, [config.width, config.height]), num_threads=96)
+        dataset = dataset.shuffle(buffer_size=config.shuffle_buffer_size)
+        dataset = dataset.batch(config.batch_size)
+        return dataset
+
+    return _f(finetune_ds)
+
 def get_dataset_from_file(config=None):
     total_ds = dlib_file_list(path)
 
@@ -350,7 +380,7 @@ def get_dataset_from_file(config=None):
         result = []
         for single_ds in ds:
             if 'ce' in single_ds[0]:
-                result += 2*6*[single_ds]
+                result += 2*7*[single_ds]
             elif 'low' in single_ds[0]:
                 result += 2*[single_ds]
             elif '21_points_1' in single_ds[0]:
@@ -379,13 +409,13 @@ def get_dataset_from_file(config=None):
         if is_train:
             dataset = dataset.map(
                 lambda filename, label: tuple(tf.py_func(
-                    read_py_function, [filename, label], [tf.float32, tf.float32])), num_threads=512)
+                    read_py_function, [filename, label], [tf.float32, tf.float32])), num_threads=256)
         else:
             dataset = dataset.map(
                 lambda filename, label: tuple(tf.py_func(
-                    read_py_function_no_aug, [filename, label], [tf.float32, tf.float32])), num_threads=128)
+                    read_py_function_no_aug, [filename, label], [tf.float32, tf.float32])), num_threads=96)
         # dataset = dataset.map(distort_tf_function, num_threads=64)
-        dataset = dataset.map(lambda i, l: resize_img(i, l, [config.width, config.height]), num_threads=128)
+        dataset = dataset.map(lambda i, l: resize_img(i, l, [config.width, config.height]), num_threads=96)
         dataset = dataset.shuffle(buffer_size=config.shuffle_buffer_size)
         dataset = dataset.batch(config.batch_size)
         return dataset
